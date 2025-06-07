@@ -249,7 +249,14 @@ if not S3_BUCKET_NAME_FROM_SECRET:
     s3_bucket_to_use = "tu-bucket-s3-aqui" # Fallback si no hay secreto
 else:
     s3_bucket_to_use = S3_BUCKET_NAME_FROM_SECRET
-    st.sidebar.success(f"✔️ Usando Bucket S3: {s3_bucket_to_use}")
+#    st.sidebar.success(f"✔️ Usando Bucket S3: {s3_bucket_to_use}")
+
+
+# (Opcional) Mostrar el prefijo y formato si quieres que el usuario los vea, pero no los edite
+# st.sidebar.markdown("---")
+# st.sidebar.markdown(f"**Prefijo en S3:** `{S3_OBJECT_PREFIX_FROM_SECRET}`")
+# st.sidebar.markdown(f"**Formato de archivo para S3:** `{S3_FILE_FORMAT_FROM_SECRET}`")
+# st.sidebar.markdown("*(Estos valores se toman de los secretos de la aplicación)*")
 
 
 uploaded_file = st.file_uploader("📂 Elige un archivo CSV (delimitado por punto y coma)", type="csv")
