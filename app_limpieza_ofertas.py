@@ -7,11 +7,12 @@ import csv
 import boto3
 import io
 
+# --- Constantes ---
 CURRENT_YEAR = datetime.now().year
 
-# --- Funciones de Limpieza (Estas funciones no cambian)---
+# --- Funciones de Limpieza (SIN CAMBIOS) ---
 def parse_fecha(fecha_str):
-    # ... (tu código existente)
+    # ... (tu código)
     if pd.isna(fecha_str): return None
     fecha_str = str(fecha_str).lower().strip()
     if not fecha_str or fecha_str == 'nan': return None
@@ -45,7 +46,7 @@ def parse_fecha(fecha_str):
     return None
 
 def limpiar_salario(monto_str, moneda_str_original, tipo_pago_str_original):
-    # ... (tu código existente)
+    # ... (tu código)
     monto_limpio, moneda_limpia, tipo_pago_limpio = None, None, None
     if pd.notna(monto_str):
         monto_str_lower = str(monto_str).lower().strip()
@@ -71,7 +72,7 @@ def limpiar_salario(monto_str, moneda_str_original, tipo_pago_str_original):
     return monto_limpio, moneda_limpia, tipo_pago_limpio
 
 def limpiar_edad(edad_str):
-    # ... (tu código existente)
+    # ... (tu código)
     if pd.isna(edad_str) or str(edad_str).lower().strip() in ['no disponible', 'nan', '']: return None
     match = re.search(r'(\d+)', str(edad_str))
     if match:
@@ -80,20 +81,19 @@ def limpiar_edad(edad_str):
     return None
 
 def capitalizar_texto(texto):
-    # ... (tu código existente)
+    # ... (tu código)
     if pd.isna(texto) or str(texto).lower().strip() in ['no disponible', 'nan', '']: return None
     return str(texto).strip().capitalize()
 
 def limpiar_lista_delimitada(texto_lista, delimitador=','):
-    # ... (tu código existente)
+    # ... (tu código)
     if pd.isna(texto_lista) or str(texto_lista).lower().strip() in ['no disponible', 'nan', '']: return None
     items = [item.strip().capitalize() for item in str(texto_lista).split(delimitador) if item.strip()]
     return delimitador.join(items) if items else None
 
-# --- Lógica Principal de Procesamiento (Esta función no cambia) ---
+# --- Lógica Principal de Procesamiento (SIN CAMBIOS) ---
 def procesar_dataframe(df_input):
     # ... (tu código existente para procesar_dataframe) ...
-    # ... (asegúrate que las columnas referenciadas en columnas_finales_map existan en df_input o se creen)
     st.write("Iniciando limpieza y transformación de datos...")
     df = df_input.copy()
     progress_bar = st.progress(0)
@@ -167,9 +167,10 @@ def procesar_dataframe(df_input):
     progress_bar.progress(7/total_steps)
     return df_final
 
-# --- Función para convertir a CSV para descarga local (Esta función no cambia) ---
+# --- Función para convertir a CSV para descarga local (SIN CAMBIOS) ---
 @st.cache_data
 def convert_df_to_csv_for_download(df_to_convert):
+    # ... (tu código)
     df_copy = df_to_convert.copy()
     cols_texto_largo = ['Descripcion_Oferta_Raw', 'Descripcion_Empresa_Raw']
     for col_name in cols_texto_largo:
@@ -183,14 +184,12 @@ def convert_df_to_csv_for_download(df_to_convert):
         st.error(f"Error durante la conversión a CSV para descarga: {e}")
         return None
 
+# --- Función para subir DataFrame a S3 (SIN CAMBIOS) ---
 def upload_df_to_s3(df_to_upload, bucket_name, s3_object_key_name, format_type="csv"):
-    # ... (tu código existente para upload_df_to_s3) ...
+    # ... (tu código)
     st.write(f"Intentando subir DataFrame a S3: s3://{bucket_name}/{s3_object_key_name}")
     try:
-        # Intenta inicializar el cliente S3 usando las credenciales de los secretos
-        # Boto3 buscará automáticamente las variables de entorno (que Streamlit Cloud establece desde los secretos)
         s3_resource = boto3.resource('s3')
-
         if format_type.lower() == "csv":
             csv_buffer = io.StringIO()
             df_for_csv = df_to_upload.astype(str).copy()
@@ -220,58 +219,45 @@ def upload_df_to_s3(df_to_upload, bucket_name, s3_object_key_name, format_type="
 
 # --- Interfaz de Streamlit ---
 st.set_page_config(page_title="Limpiador CSV Ofertas vS3", layout="wide")
-# Puedes añadir un logo si quieres:
-# st.image("ruta/a/tu/logo.png", width=200)
+# st.image("ruta/a/tu/logo.png", width=200) # Descomenta y ajusta si tienes un logo
 st.title("🧹 Limpiador y Estandarizador de CSV de Ofertas Laborales (con Subida a S3)")
 st.markdown("""
 Sube un archivo CSV con datos de ofertas laborales (delimitado por **punto y coma ;** y codificado en **UTF-8**) 
 para limpiarlo, estandarizarlo y prepararlo para análisis. El archivo limpio se subirá a Amazon S3.
 """)
 
-# --- Configuración de S3 ---
-st.sidebar.header("⚙️ Configuración de AWS S3")
-
-# Usar st.secrets para obtener los valores si están definidos
+# --- Leer configuración de S3 directamente de los secretos ---
 # Estos son los NOMBRES DE LOS SECRETOS que debes definir en Streamlit Community Cloud
-AWS_ACCESS_KEY_ID_SECRET = st.secrets.get("AWS_ACCESS_KEY_ID", "")
-AWS_SECRET_ACCESS_KEY_SECRET = st.secrets.get("AWS_SECRET_ACCESS_KEY", "")
-AWS_DEFAULT_REGION_SECRET = st.secrets.get("AWS_DEFAULT_REGION", "us-east-1") # Proporciona una región por defecto
-S3_BUCKET_NAME_SECRET = st.secrets.get("S3_PROCESSED_BUCKET", "")
-S3_OBJECT_PREFIX_SECRET = st.secrets.get("S3_OBJECT_PREFIX", "ofertas_limpias/")
-S3_FILE_FORMAT_SECRET = st.secrets.get("S3_FILE_FORMAT", "csv")
+# Si un secreto no está definido, se usará el valor por defecto o un string vacío.
+AWS_ACCESS_KEY_ID_LOADED = st.secrets.get("AWS_ACCESS_KEY_ID", "")
+AWS_SECRET_ACCESS_KEY_LOADED = st.secrets.get("AWS_SECRET_ACCESS_KEY", "")
+# AWS_DEFAULT_REGION_LOADED = st.secrets.get("AWS_DEFAULT_REGION", "us-east-1") # Boto3 lo toma de las vars de entorno
 
-# Campos de entrada en la barra lateral, usando los secretos como valores por defecto
-# El usuario puede sobrescribirlos si es necesario, pero se cargarán desde los secretos si existen.
-s3_bucket_name = st.sidebar.text_input(
-    "Nombre de tu Bucket S3 (zona procesada)",
-    S3_BUCKET_NAME_SECRET or "tu-bucket-s3-aqui" # Muestra placeholder si el secreto está vacío
-)
-s3_object_prefix = st.sidebar.text_input(
-    "Prefijo/Carpeta en S3 (opcional, ej: 'ofertas_limpias/')",
-    S3_OBJECT_PREFIX_SECRET # Usa el secreto directamente, o el valor por defecto si está vacío
-)
-s3_file_format_options = ["csv", "parquet"]
-default_format_index = s3_file_format_options.index(S3_FILE_FORMAT_SECRET) if S3_FILE_FORMAT_SECRET in s3_file_format_options else 0
-s3_file_format = st.sidebar.selectbox(
-    "Formato de archivo para S3",
-    s3_file_format_options,
-    index=default_format_index
-)
+S3_BUCKET_NAME_FROM_SECRET = st.secrets.get("S3_PROCESSED_BUCKET", "")
+S3_OBJECT_PREFIX_FROM_SECRET = st.secrets.get("S3_OBJECT_PREFIX", "ofertas_limpias/") # Valor por defecto si no está en secretos
+S3_FILE_FORMAT_FROM_SECRET = st.secrets.get("S3_FILE_FORMAT", "csv") # Valor por defecto si no está en secretos
 
-# Inicialización de Boto3 (esto es importante para que use los secretos si están definidos como variables de entorno por Streamlit Cloud)
-# Boto3 buscará las credenciales en este orden:
-# 1. Pasadas directamente al crear el cliente/recurso (no lo hacemos aquí para usar los secretos).
-# 2. Variables de entorno (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, AWS_DEFAULT_REGION).
-#    Streamlit Cloud establece estas variables de entorno a partir de tus st.secrets.
-# 3. Archivo de credenciales compartidas (~/.aws/credentials).
-# 4. Archivo de configuración de AWS (~/.aws/config).
-# 5. Roles de IAM (si se ejecuta en un servicio AWS como EC2/Lambda).
+# Ya no mostramos estos en la barra lateral, se usan directamente.
+# Si quieres que el usuario PUEDA sobrescribirlos, entonces sí los pones en la sidebar como antes.
+# Pero si quieres que SIEMPRE se usen los de los secretos, entonces no los expongas en la UI.
 
-# No necesitas pasar explícitamente las claves a boto3.client() o boto3.resource()
-# si están correctamente configuradas como secretos en Streamlit Cloud,
-# ya que Streamlit las expondrá como variables de entorno.
-# Si AWS_ACCESS_KEY_ID_SECRET, etc., están vacíos (porque no se definieron secretos o se ejecuta localmente sin `aws configure`),
-# boto3 intentará los otros métodos de la cadena de credenciales.
+# Mostrar un mensaje si la configuración de S3 no está completa en los secretos
+if not S3_BUCKET_NAME_FROM_SECRET:
+    st.sidebar.warning("⚠️ Nombre del Bucket S3 no configurado en los secretos de Streamlit.")
+    st.sidebar.info("La aplicación intentará usar 'tu-bucket-s3-aqui'. "
+                    "Para un funcionamiento correcto, configura `S3_PROCESSED_BUCKET` en los secretos.")
+    s3_bucket_to_use = "tu-bucket-s3-aqui" # Fallback si no hay secreto
+else:
+    s3_bucket_to_use = S3_BUCKET_NAME_FROM_SECRET
+    st.sidebar.success(f"✔️ Usando Bucket S3: {s3_bucket_to_use}")
+
+
+# (Opcional) Mostrar el prefijo y formato si quieres que el usuario los vea, pero no los edite
+st.sidebar.markdown("---")
+st.sidebar.markdown(f"**Prefijo en S3:** `{S3_OBJECT_PREFIX_FROM_SECRET}`")
+st.sidebar.markdown(f"**Formato de archivo para S3:** `{S3_FILE_FORMAT_FROM_SECRET}`")
+st.sidebar.markdown("*(Estos valores se toman de los secretos de la aplicación)*")
+
 
 uploaded_file = st.file_uploader("📂 Elige un archivo CSV (delimitado por punto y coma)", type="csv")
 
@@ -284,10 +270,12 @@ if uploaded_file is not None:
         st.dataframe(df_original.head())
 
         if st.button("🚀 Procesar, Limpiar y Subir a S3"):
-            if not s3_bucket_name or s3_bucket_name == "tu-bucket-s3-aqui": # Comprueba si el valor es el placeholder
-                st.error("Por favor, ingresa un nombre de bucket S3 válido en la barra lateral o configúralo en los secretos de Streamlit.")
-            elif not AWS_ACCESS_KEY_ID_SECRET or not AWS_SECRET_ACCESS_KEY_SECRET:
-                 st.error("Las credenciales de AWS (AWS_ACCESS_KEY_ID o AWS_SECRET_ACCESS_KEY) no están configuradas en los secretos de Streamlit. La subida a S3 fallará.")
+            if not s3_bucket_to_use or s3_bucket_to_use == "tu-bucket-s3-aqui":
+                st.error("El nombre del Bucket S3 no está configurado correctamente. "
+                         "Por favor, configura el secreto `S3_PROCESSED_BUCKET` en Streamlit Cloud.")
+            elif not AWS_ACCESS_KEY_ID_LOADED or not AWS_SECRET_ACCESS_KEY_LOADED:
+                 st.error("Las credenciales de AWS (AWS_ACCESS_KEY_ID o AWS_SECRET_ACCESS_KEY) "
+                          "no están configuradas en los secretos de Streamlit. La subida a S3 fallará.")
             else:
                 with st.spinner('Procesando archivo... Esto puede tardar unos segundos.'):
                     df_limpio = procesar_dataframe(df_original.copy())
@@ -302,16 +290,15 @@ if uploaded_file is not None:
                     base, _ = os.path.splitext(uploaded_file.name)
                     base_filename_original = f"{base}_limpio"
                 
-                # Asegurarse de que el prefijo termine con / si no está vacío
                 final_prefix = ""
-                if s3_object_prefix:
-                    final_prefix = s3_object_prefix.strip()
+                if S3_OBJECT_PREFIX_FROM_SECRET: # Usar el prefijo del secreto
+                    final_prefix = S3_OBJECT_PREFIX_FROM_SECRET.strip()
                     if not final_prefix.endswith('/'):
                         final_prefix += '/'
                 
-                s3_object_name_final = f"{final_prefix}{base_filename_original}_{timestamp}.{s3_file_format}"
+                s3_object_name_final = f"{final_prefix}{base_filename_original}_{timestamp}.{S3_FILE_FORMAT_FROM_SECRET}" # Usar el formato del secreto
                 
-                upload_successful = upload_df_to_s3(df_limpio, s3_bucket_name, s3_object_name_final, format_type=s3_file_format)
+                upload_successful = upload_df_to_s3(df_limpio, s3_bucket_to_use, s3_object_name_final, format_type=S3_FILE_FORMAT_FROM_SECRET)
 
                 if upload_successful:
                     st.markdown("---")
@@ -330,17 +317,10 @@ if uploaded_file is not None:
             
     except pd.errors.ParserError as pe:
         st.error(f"Error de Pandas al parsear el CSV de ENTRADA: {pe}")
-        st.error("Asegúrate de que el archivo esté bien formado, use ';' como separador y esté codificado en UTF-8.")
-        if uploaded_file:
-            uploaded_file.seek(0)
-            try:
-                lines_to_show = [line.decode('utf-8-sig', errors='replace').strip() for i, line in enumerate(uploaded_file.readlines()) if i < 15]
-                st.text_area("Primeras 15 líneas del archivo subido (para depuración de formato):", "\n".join(lines_to_show), height=300)
-            except Exception as read_exc:
-                 st.error(f"No se pudo leer el archivo para depuración: {read_exc}")
+        # ... (tu manejo de errores)
     except Exception as e:
         st.error(f"Ocurrió un error inesperado durante el procesamiento: {e}")
-        st.exception(e)
+        # ... (tu manejo de errores)
 else:
     st.info("👋 ¡Bienvenido! Por favor, sube un archivo CSV para comenzar.")
 
