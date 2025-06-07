@@ -3,15 +3,15 @@ import pandas as pd
 import re
 from datetime import datetime, timedelta
 import os
-import csv # Importar csv para las constantes de quoting
-import boto3 # <--- AÑADIDO para S3
-import io    # <--- AÑADIDO para manejar buffers en memoria
+import csv
+import boto3
+import io
 
-# --- Constantes ---
 CURRENT_YEAR = datetime.now().year
 
-# --- Funciones de Limpieza (SIN CAMBIOS, las tuyas están bien) ---
+# --- Funciones de Limpieza (Estas funciones no cambian)---
 def parse_fecha(fecha_str):
+    # ... (tu código existente)
     if pd.isna(fecha_str): return None
     fecha_str = str(fecha_str).lower().strip()
     if not fecha_str or fecha_str == 'nan': return None
@@ -45,6 +45,7 @@ def parse_fecha(fecha_str):
     return None
 
 def limpiar_salario(monto_str, moneda_str_original, tipo_pago_str_original):
+    # ... (tu código existente)
     monto_limpio, moneda_limpia, tipo_pago_limpio = None, None, None
     if pd.notna(monto_str):
         monto_str_lower = str(monto_str).lower().strip()
@@ -70,6 +71,7 @@ def limpiar_salario(monto_str, moneda_str_original, tipo_pago_str_original):
     return monto_limpio, moneda_limpia, tipo_pago_limpio
 
 def limpiar_edad(edad_str):
+    # ... (tu código existente)
     if pd.isna(edad_str) or str(edad_str).lower().strip() in ['no disponible', 'nan', '']: return None
     match = re.search(r'(\d+)', str(edad_str))
     if match:
@@ -78,16 +80,20 @@ def limpiar_edad(edad_str):
     return None
 
 def capitalizar_texto(texto):
+    # ... (tu código existente)
     if pd.isna(texto) or str(texto).lower().strip() in ['no disponible', 'nan', '']: return None
     return str(texto).strip().capitalize()
 
 def limpiar_lista_delimitada(texto_lista, delimitador=','):
+    # ... (tu código existente)
     if pd.isna(texto_lista) or str(texto_lista).lower().strip() in ['no disponible', 'nan', '']: return None
     items = [item.strip().capitalize() for item in str(texto_lista).split(delimitador) if item.strip()]
     return delimitador.join(items) if items else None
 
-# --- Lógica Principal de Procesamiento (SIN CAMBIOS, tu función está bien) ---
+# --- Lógica Principal de Procesamiento (Esta función no cambia) ---
 def procesar_dataframe(df_input):
+    # ... (tu código existente para procesar_dataframe) ...
+    # ... (asegúrate que las columnas referenciadas en columnas_finales_map existan en df_input o se creen)
     st.write("Iniciando limpieza y transformación de datos...")
     df = df_input.copy()
     progress_bar = st.progress(0)
@@ -129,20 +135,19 @@ def procesar_dataframe(df_input):
         'Tipo_Contrato_Limpio': 'Tipo_Contrato', 'Tipo_Jornada_Limpio': 'Tipo_Jornada',
         'Modalidad_Trabajo_Limpio': 'Modalidad_Trabajo', 'Salario_Monto_Limpio': 'Salario_Monto',
         'Salario_Moneda_Limpia': 'Salario_Moneda', 'Salario_Tipo_Pago_Limpio': 'Salario_Tipo_Pago',
-        'Descripcion_Oferta_Raw': 'Descripcion_Oferta_Raw', # Asegúrate que esta columna exista en el input si la quieres
+        'Descripcion_Oferta_Raw': 'Descripcion_Oferta_Raw',
         'Lenguajes_Lista_Limpia': 'Lenguajes_Lista', 'Frameworks_Lista_Limpia': 'Frameworks_Lista',
         'gestores_db_Lista_Limpia': 'Bases_Datos_Lista', 'Herramientas_Lista_Limpia': 'Herramientas_Lista',
         'nivel_ingles_Limpio': 'Nivel_Ingles', 'nivel_educacion_Limpio': 'Nivel_Educacion',
         'Anos_Experiencia_Limpio': 'Anos_Experiencia',
         'Conocimientos_Adicionales_Lista_Limpia': 'Conocimientos_Adicionales_Lista',
         'Edad_minima_Limpia': 'Edad_Minima', 'Edad_maxima_Limpia': 'Edad_Maxima',
-        'NombreEmpresa_Limpio': 'Nombre_Empresa', 'DescripciónEmpresa': 'Descripcion_Empresa_Raw', # Asegúrate que esta columna exista
+        'NombreEmpresa_Limpio': 'Nombre_Empresa', 'DescripciónEmpresa': 'Descripcion_Empresa_Raw',
         'Enlace_Oferta': 'Enlace_Oferta', 'Categoría_Limpio': 'Categoria_Puesto'
     }
     df_final = pd.DataFrame()
     for processed_col_key, final_col_name in columnas_finales_map.items():
         col_to_use_from_df_processed = None
-        # Lógica para encontrar la columna correcta en df (la tuya es más compleja, la simplifico aquí)
         if processed_col_key in df.columns:
             col_to_use_from_df_processed = processed_col_key
         elif processed_col_key.replace('_Limpio', '').replace('_Lista_Limpia', '') in df.columns:
@@ -152,24 +157,19 @@ def procesar_dataframe(df_input):
             elif original_col_name + '_Lista_Limpia' in df.columns:
                  col_to_use_from_df_processed = original_col_name + '_Lista_Limpia'
             else:
-                col_to_use_from_df_processed = original_col_name # Usar la columna original si no hay _Limpia o _Lista_Limpia
-
+                col_to_use_from_df_processed = original_col_name
         if col_to_use_from_df_processed and col_to_use_from_df_processed in df.columns:
             df_final[final_col_name] = df[col_to_use_from_df_processed]
-        elif processed_col_key in df.columns: # Caso donde la clave original es la que se usa
+        elif processed_col_key in df.columns:
              df_final[final_col_name] = df[processed_col_key]
         else:
-            # st.warning(f"Columna fuente para '{final_col_name}' (intentando con '{processed_col_key}') no encontrada. Se creará como vacía.")
-            df_final[final_col_name] = pd.Series([None] * len(df), dtype='object') # dtype='object' para evitar problemas de tipo con None
+            df_final[final_col_name] = pd.Series([None] * len(df), dtype='object')
     progress_bar.progress(7/total_steps)
-    # st.write("--- Inspección df_final (dentro de procesar_dataframe) ---") # Para depuración
-    # st.dataframe(df_final.head(2))
     return df_final
 
-# --- Función para convertir a CSV para descarga local (MODIFICADA para ser independiente) ---
-@st.cache_data # Cachear el resultado de la conversión para descargas rápidas
+# --- Función para convertir a CSV para descarga local (Esta función no cambia) ---
+@st.cache_data
 def convert_df_to_csv_for_download(df_to_convert):
-    # st.write("--- Dentro de convert_df_to_csv_for_download ---") # Para depuración
     df_copy = df_to_convert.copy()
     cols_texto_largo = ['Descripcion_Oferta_Raw', 'Descripcion_Empresa_Raw']
     for col_name in cols_texto_largo:
@@ -183,27 +183,24 @@ def convert_df_to_csv_for_download(df_to_convert):
         st.error(f"Error durante la conversión a CSV para descarga: {e}")
         return None
 
-# --- NUEVA FUNCIÓN para subir DataFrame a S3 ---
 def upload_df_to_s3(df_to_upload, bucket_name, s3_object_key_name, format_type="csv"):
-    """Sube un DataFrame de Pandas a un bucket S3 como CSV o Parquet."""
+    # ... (tu código existente para upload_df_to_s3) ...
     st.write(f"Intentando subir DataFrame a S3: s3://{bucket_name}/{s3_object_key_name}")
     try:
-        s3_resource = boto3.resource('s3') # Puedes inicializarlo una vez fuera si prefieres
+        # Intenta inicializar el cliente S3 usando las credenciales de los secretos
+        # Boto3 buscará automáticamente las variables de entorno (que Streamlit Cloud establece desde los secretos)
+        s3_resource = boto3.resource('s3')
+
         if format_type.lower() == "csv":
             csv_buffer = io.StringIO()
-            # Asegurar que todas las columnas son string antes de guardar, especialmente si hay None
-            df_for_csv = df_to_upload.astype(str).copy() # Convertir todo a string para evitar errores con tipos mixtos y None
-            # Reemplazar "None" (string) por string vacío para na_rep
+            df_for_csv = df_to_upload.astype(str).copy()
             df_for_csv.replace('None', '', inplace=True)
             df_for_csv.replace('nan', '', inplace=True)
-
-
             cols_texto_largo = ['Descripcion_Oferta_Raw', 'Descripcion_Empresa_Raw']
             for col_name in cols_texto_largo:
                 if col_name in df_for_csv.columns:
                     df_for_csv[col_name] = df_for_csv[col_name].str.replace('\r\n', ' ', regex=False).str.replace('\n', ' ', regex=False)
                     df_for_csv[col_name] = df_for_csv[col_name].str.replace(r'\s+', ' ', regex=True).str.strip()
-
             df_for_csv.to_csv(csv_buffer, index=False, encoding='utf-8-sig', sep=',', quoting=csv.QUOTE_MINIMAL, na_rep='')
             s3_resource.Object(bucket_name, s3_object_key_name).put(Body=csv_buffer.getvalue().encode('utf-8-sig'))
             st.success(f"DataFrame subido como CSV exitosamente a s3://{bucket_name}/{s3_object_key_name}")
@@ -222,24 +219,59 @@ def upload_df_to_s3(df_to_upload, bucket_name, s3_object_key_name, format_type="
         return False
 
 # --- Interfaz de Streamlit ---
-st.set_page_config(page_title="Limpiador CSV de Ofertas vS3", layout="wide")
-st.image("https://raw.githubusercontent.com/dataprofessor/dashboard-app-credit-card/main/logo.png", width=300) # Ejemplo de logo
+st.set_page_config(page_title="Limpiador CSV Ofertas vS3", layout="wide")
+# Puedes añadir un logo si quieres:
+# st.image("ruta/a/tu/logo.png", width=200)
 st.title("🧹 Limpiador y Estandarizador de CSV de Ofertas Laborales (con Subida a S3)")
 st.markdown("""
 Sube un archivo CSV con datos de ofertas laborales (delimitado por **punto y coma ;** y codificado en **UTF-8**) 
 para limpiarlo, estandarizarlo y prepararlo para análisis. El archivo limpio se subirá a Amazon S3.
 """)
 
-# --- Configuración de S3 (Podrías poner esto en variables de entorno o config de Streamlit Cloud) ---
+# --- Configuración de S3 ---
 st.sidebar.header("⚙️ Configuración de AWS S3")
-# Intenta leer de los secretos de Streamlit si está desplegado, sino usa un valor por defecto
-DEFAULT_BUCKET = ""
-if hasattr(st, 'secrets') and "S3_PROCESSED_BUCKET" in st.secrets:
-    DEFAULT_BUCKET = st.secrets["S3_PROCESSED_BUCKET"]
-s3_bucket_name = st.sidebar.text_input("Nombre de tu Bucket S3 (zona procesada)", DEFAULT_BUCKET or "tu-bucket-s3-aqui")
-s3_object_prefix = st.sidebar.text_input("Prefijo/Carpeta en S3 (opcional, ej: 'ofertas_limpias/')", "ofertas_limpias/")
-s3_file_format = st.sidebar.selectbox("Formato de archivo para S3", ["csv", "parquet"], index=0)
 
+# Usar st.secrets para obtener los valores si están definidos
+# Estos son los NOMBRES DE LOS SECRETOS que debes definir en Streamlit Community Cloud
+AWS_ACCESS_KEY_ID_SECRET = st.secrets.get("AWS_ACCESS_KEY_ID", "")
+AWS_SECRET_ACCESS_KEY_SECRET = st.secrets.get("AWS_SECRET_ACCESS_KEY", "")
+AWS_DEFAULT_REGION_SECRET = st.secrets.get("AWS_DEFAULT_REGION", "us-east-1") # Proporciona una región por defecto
+S3_BUCKET_NAME_SECRET = st.secrets.get("S3_PROCESSED_BUCKET", "")
+S3_OBJECT_PREFIX_SECRET = st.secrets.get("S3_OBJECT_PREFIX", "ofertas_limpias/")
+S3_FILE_FORMAT_SECRET = st.secrets.get("S3_FILE_FORMAT", "csv")
+
+# Campos de entrada en la barra lateral, usando los secretos como valores por defecto
+# El usuario puede sobrescribirlos si es necesario, pero se cargarán desde los secretos si existen.
+s3_bucket_name = st.sidebar.text_input(
+    "Nombre de tu Bucket S3 (zona procesada)",
+    S3_BUCKET_NAME_SECRET or "tu-bucket-s3-aqui" # Muestra placeholder si el secreto está vacío
+)
+s3_object_prefix = st.sidebar.text_input(
+    "Prefijo/Carpeta en S3 (opcional, ej: 'ofertas_limpias/')",
+    S3_OBJECT_PREFIX_SECRET # Usa el secreto directamente, o el valor por defecto si está vacío
+)
+s3_file_format_options = ["csv", "parquet"]
+default_format_index = s3_file_format_options.index(S3_FILE_FORMAT_SECRET) if S3_FILE_FORMAT_SECRET in s3_file_format_options else 0
+s3_file_format = st.sidebar.selectbox(
+    "Formato de archivo para S3",
+    s3_file_format_options,
+    index=default_format_index
+)
+
+# Inicialización de Boto3 (esto es importante para que use los secretos si están definidos como variables de entorno por Streamlit Cloud)
+# Boto3 buscará las credenciales en este orden:
+# 1. Pasadas directamente al crear el cliente/recurso (no lo hacemos aquí para usar los secretos).
+# 2. Variables de entorno (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, AWS_DEFAULT_REGION).
+#    Streamlit Cloud establece estas variables de entorno a partir de tus st.secrets.
+# 3. Archivo de credenciales compartidas (~/.aws/credentials).
+# 4. Archivo de configuración de AWS (~/.aws/config).
+# 5. Roles de IAM (si se ejecuta en un servicio AWS como EC2/Lambda).
+
+# No necesitas pasar explícitamente las claves a boto3.client() o boto3.resource()
+# si están correctamente configuradas como secretos en Streamlit Cloud,
+# ya que Streamlit las expondrá como variables de entorno.
+# Si AWS_ACCESS_KEY_ID_SECRET, etc., están vacíos (porque no se definieron secretos o se ejecuta localmente sin `aws configure`),
+# boto3 intentará los otros métodos de la cadena de credenciales.
 
 uploaded_file = st.file_uploader("📂 Elige un archivo CSV (delimitado por punto y coma)", type="csv")
 
@@ -247,35 +279,40 @@ if uploaded_file is not None:
     st.write("---")
     st.subheader("📄 Previsualización del CSV Original (primeras 5 filas):")
     try:
-        # Forzar todos los datos a string inicialmente para evitar errores de tipo al leer y preservar NAs como strings vacíos.
         df_original = pd.read_csv(uploaded_file, sep=';', encoding='utf-8-sig', dtype=str, keep_default_na=False, na_values=[''])
-        df_original = df_original.fillna('') # Reemplazar NaN explícitos con string vacío para consistencia
+        df_original = df_original.fillna('')
         st.dataframe(df_original.head())
 
         if st.button("🚀 Procesar, Limpiar y Subir a S3"):
-            if not s3_bucket_name or s3_bucket_name == "tu-bucket-s3-aqui":
-                st.error("Por favor, ingresa un nombre de bucket S3 válido en la barra lateral.")
+            if not s3_bucket_name or s3_bucket_name == "tu-bucket-s3-aqui": # Comprueba si el valor es el placeholder
+                st.error("Por favor, ingresa un nombre de bucket S3 válido en la barra lateral o configúralo en los secretos de Streamlit.")
+            elif not AWS_ACCESS_KEY_ID_SECRET or not AWS_SECRET_ACCESS_KEY_SECRET:
+                 st.error("Las credenciales de AWS (AWS_ACCESS_KEY_ID o AWS_SECRET_ACCESS_KEY) no están configuradas en los secretos de Streamlit. La subida a S3 fallará.")
             else:
                 with st.spinner('Procesando archivo... Esto puede tardar unos segundos.'):
-                    df_limpio = procesar_dataframe(df_original.copy()) # Pasa una copia para evitar modificar el original en re-runs
+                    df_limpio = procesar_dataframe(df_original.copy())
                 
                 st.subheader("📊 Previsualización del CSV Limpio (DataFrame interno, primeras 5 filas):")
                 st.dataframe(df_limpio.head())
                 st.success("¡Procesamiento interno completado exitosamente!")
 
-                # Generar nombre del objeto en S3
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 base_filename_original = "ofertas_procesadas"
                 if hasattr(uploaded_file, 'name') and uploaded_file.name:
                     base, _ = os.path.splitext(uploaded_file.name)
                     base_filename_original = f"{base}_limpio"
                 
-                s3_object_name_final = f"{s3_object_prefix.rstrip('/')+'/' if s3_object_prefix else ''}{base_filename_original}_{timestamp}.{s3_file_format}"
+                # Asegurarse de que el prefijo termine con / si no está vacío
+                final_prefix = ""
+                if s3_object_prefix:
+                    final_prefix = s3_object_prefix.strip()
+                    if not final_prefix.endswith('/'):
+                        final_prefix += '/'
                 
-                # Subir a S3
+                s3_object_name_final = f"{final_prefix}{base_filename_original}_{timestamp}.{s3_file_format}"
+                
                 upload_successful = upload_df_to_s3(df_limpio, s3_bucket_name, s3_object_name_final, format_type=s3_file_format)
 
-                # Opción de descarga local (si aún la quieres y la subida fue exitosa)
                 if upload_successful:
                     st.markdown("---")
                     st.info("El archivo también está disponible para descarga local.")
@@ -294,17 +331,16 @@ if uploaded_file is not None:
     except pd.errors.ParserError as pe:
         st.error(f"Error de Pandas al parsear el CSV de ENTRADA: {pe}")
         st.error("Asegúrate de que el archivo esté bien formado, use ';' como separador y esté codificado en UTF-8.")
-        if uploaded_file: # Solo si hay archivo para evitar error
+        if uploaded_file:
             uploaded_file.seek(0)
             try:
                 lines_to_show = [line.decode('utf-8-sig', errors='replace').strip() for i, line in enumerate(uploaded_file.readlines()) if i < 15]
                 st.text_area("Primeras 15 líneas del archivo subido (para depuración de formato):", "\n".join(lines_to_show), height=300)
             except Exception as read_exc:
                  st.error(f"No se pudo leer el archivo para depuración: {read_exc}")
-
     except Exception as e:
         st.error(f"Ocurrió un error inesperado durante el procesamiento: {e}")
-        st.exception(e) # Muestra el traceback completo para depuración
+        st.exception(e)
 else:
     st.info("👋 ¡Bienvenido! Por favor, sube un archivo CSV para comenzar.")
 
