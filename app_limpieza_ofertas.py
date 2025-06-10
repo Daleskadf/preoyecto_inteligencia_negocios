@@ -10,7 +10,7 @@ import io
 # --- Constantes ---
 CURRENT_YEAR = datetime.now().year
 
-# --- Funciones de Limpieza (MODIFICADAS para enteros donde pediste) ---
+# --- Funciones de Limpieza (Mantenidas, con ajuste en limpiar_salario para devolver int o pd.NA) ---
 def parse_fecha(fecha_str):
     if pd.isna(fecha_str) or not str(fecha_str).strip() or str(fecha_str).lower().strip() == 'nan': return None
     fecha_str = str(fecha_str).lower().strip()
@@ -44,8 +44,7 @@ def parse_fecha(fecha_str):
     return None
 
 def limpiar_salario(monto_str, moneda_str_original, tipo_pago_str_original):
-    monto_limpio_float = None # Variable intermedia para el float
-    monto_limpio_int = None   # Variable final para el entero
+    monto_limpio_int = pd.NA # Usar pd.NA para Int64 de Pandas
     moneda_limpia, tipo_pago_limpio = None, None
     
     if pd.notna(monto_str) and str(monto_str).strip():
@@ -53,16 +52,16 @@ def limpiar_salario(monto_str, moneda_str_original, tipo_pago_str_original):
         invalidos_salario = ['no disponible', 'a convenir', 'según mercado', 'nan', 'acordar', 'negociable', '']
         if monto_str_procesado not in invalidos_salario:
             s = str(monto_str).replace('S/.', '').replace('USD', '').replace('EUR', '')
-            s = s.replace(',', '') # Asume comas son separadores de miles
-            match_num = re.search(r'(\d+\.?\d*)', s) # Acepta punto decimal
+            s = s.replace(',', '') 
+            match_num = re.search(r'(\d+\.?\d*)', s)
             if match_num:
                 try: 
-                    monto_limpio_float = float(match_num.group(1))
-                    monto_limpio_int = int(round(monto_limpio_float)) # Redondear y convertir a INT
+                    monto_float = float(match_num.group(1))
+                    monto_limpio_int = int(round(monto_float)) 
                 except ValueError:
                     pass 
     
-    if monto_limpio_int is not None: # Usar la variable int para las condiciones
+    if pd.notna(monto_limpio_int): # Si tenemos un monto numérico
         if pd.notna(moneda_str_original) and str(moneda_str_original).strip():
             moneda_str_lower = str(moneda_str_original).lower().strip()
             if moneda_str_lower not in ['no disponible', 'nan', '']:
@@ -79,25 +78,25 @@ def limpiar_salario(monto_str, moneda_str_original, tipo_pago_str_original):
             tipo_pago_lower = str(tipo_pago_str_original).lower().strip()
             if tipo_pago_lower not in ['no disponible', 'nan', 'acordar', 'negociable']:
                 tipo_pago_limpio = str(tipo_pago_str_original).strip().capitalize()
-        if tipo_pago_limpio is None and monto_limpio_int > 200: # Usar la variable int
+        if tipo_pago_limpio is None and monto_limpio_int > 200:
              tipo_pago_limpio = "Mensual"
         elif tipo_pago_limpio is None:
              tipo_pago_limpio = "No especificado"
              
-    return monto_limpio_int, moneda_limpia, tipo_pago_limpio # Devolver el entero
+    return monto_limpio_int, moneda_limpia, tipo_pago_limpio
 
-def limpiar_edad(edad_str): # Ya devuelve int o None, esto está bien
-    if pd.isna(edad_str) or str(edad_str).lower().strip() in ['no disponible', 'nan', '']: return None
+def limpiar_edad(edad_str): # Devuelve int (como Int64) o pd.NA
+    if pd.isna(edad_str) or str(edad_str).lower().strip() in ['no disponible', 'nan', '']: return pd.NA
     try: return int(float(str(edad_str))) 
     except ValueError:
         match = re.search(r'(\d+)', str(edad_str))
         if match:
             try: return int(match.group(1))
-            except ValueError: return None
-    return None
+            except ValueError: return pd.NA
+    return pd.NA
 
 def capitalizar_texto(texto):
-    if pd.isna(texto) or str(texto).strip() == '': return None
+    if pd.isna(texto) or str(texto).strip() == '': return None # Devolver None para que se convierta en pd.NA si la columna es object
     texto_lower = str(texto).lower().strip()
     if texto_lower in ['no disponible', 'nan']: return None
     return str(texto).strip().capitalize()
@@ -114,70 +113,102 @@ def procesar_dataframe(df_input):
     st.write("Iniciando proceso de estandarización y preparación de datos...")
     df = df_input.copy()
     
+    # Ajustar esta lista si 'Ciudad' ya no existe en tu CSV de entrada
     columnas_esperadas_del_csv_original = [
-        'ID_Oferta', 'Título', 'Ciudad', 'Region_Departamento', 'Fecha_Publicacion',
+        'ID_Oferta', 'Título', 'Region_Departamento', 'Fecha_Publicacion', # 'Ciudad' eliminada
         'Tipo_Contrato', 'Tipo_Jornada', 'Modalidad_Trabajo', 'Salario_Monto',
         'Salario_Moneda', 'Salario_Tipo_Pago', 'Descripcion_Oferta_Raw', 'Lenguajes',
         'Frameworks', 'gestores_db', 'Herramientas', 'nivel_ingles', 'nivel_educacion',
         'Anos_Experiencia', 'Conocimientos_Adicionales', 'Edad_minima', 'Edad_maxima',
         'NombreEmpresa', 'DescripciónEmpresa', 'Enlace_Oferta', 'Categoría'
     ]
+    if 'Ciudad' in df.columns: # Si 'Ciudad' AÚN existe en el df_input, añadirla a la lista para que se procese
+        # pero no la añadimos a columnas_esperadas_del_csv_original si ya no la esperas del archivo
+        pass
+    
     for col_esperada in columnas_esperadas_del_csv_original:
         if col_esperada not in df.columns:
-            st.warning(f"Advertencia: Columna '{col_esperada}' no encontrada. Se creará con valores Nulos.")
+            st.warning(f"Advertencia: Columna '{col_esperada}' no encontrada en el archivo CSV subido. Se creará como Nula.")
             df[col_esperada] = pd.NA
 
     df['Fecha_Publicacion_Limpia'] = df['Fecha_Publicacion'].apply(parse_fecha)
-    salarios_limpios = df.apply(lambda r: limpiar_salario(r['Salario_Monto'], r['Salario_Moneda'], r['Salario_Tipo_Pago']), axis=1)
-    # Salario_Monto_Limpio ahora será Int64 o object si hay Nones.
-    df[['Salario_Monto_Limpio', 'Salario_Moneda_Limpia', 'Salario_Tipo_Pago_Limpio']] = pd.DataFrame(salarios_limpios.tolist(), index=df.index).astype({'Salario_Monto_Limpio': 'Int64'}, errors='ignore')
-
-    df['Edad_minima_Limpia'] = df['Edad_minima'].apply(limpiar_edad).astype('Int64', errors='ignore') # Asegurar Int64 para nulos
-    df['Edad_maxima_Limpia'] = df['Edad_maxima'].apply(limpiar_edad).astype('Int64', errors='ignore') # Asegurar Int64 para nulos
     
-    columnas_texto_a_capitalizar = ['Título', 'Ciudad', 'Region_Departamento', 'Tipo_Contrato', 'Tipo_Jornada', 'Modalidad_Trabajo', 'nivel_ingles', 'nivel_educacion', 'NombreEmpresa', 'Categoría']
-    for col in columnas_texto_a_capitalizar: df[col + '_Limpio'] = df[col].apply(capitalizar_texto)
-        
-    columnas_lista_a_limpiar = ['Lenguajes', 'Frameworks', 'gestores_db', 'Herramientas', 'Conocimientos_Adicionales']
-    for col in columnas_lista_a_limpiar: df[col + '_Lista_Limpia'] = df[col].apply(lambda x: limpiar_lista_delimitada(x, delimitador=','))
-        
-    # Para Anos_Experiencia, asegurar que es Int64 para manejar pd.NA
-    # La función pd.to_numeric ya puede devolver float con NaN si hay errores
-    df['Anos_Experiencia_Limpio_Float'] = pd.to_numeric(df['Anos_Experiencia'], errors='coerce')
-    # Convertir a Int64, los NaN se volverán pd.NA. Redondear si es necesario (aunque años no suele tener decimales)
-    df['Anos_Experiencia_Limpio'] = df['Anos_Experiencia_Limpio_Float'].apply(lambda x: int(round(x)) if pd.notna(x) else pd.NA).astype('Int64', errors='ignore')
+    # Aplicar limpiar_salario y asignar a nuevas columnas
+    salario_data = df.apply(lambda r: limpiar_salario(r['Salario_Monto'], r['Salario_Moneda'], r['Salario_Tipo_Pago']), axis=1, result_type='expand')
+    df['Salario_Monto_Limpio'] = salario_data[0].astype('Int64') # Forzar a Int64
+    df['Salario_Moneda_Limpia'] = salario_data[1]
+    df['Salario_Tipo_Pago_Limpio'] = salario_data[2]
 
+    df['Edad_minima_Limpia'] = df['Edad_minima'].apply(limpiar_edad).astype('Int64') # Forzar a Int64
+    df['Edad_maxima_Limpia'] = df['Edad_maxima'].apply(limpiar_edad).astype('Int64') # Forzar a Int64
+    
+    # Ajustar esta lista si 'Ciudad' ya no se usa
+    columnas_texto_a_capitalizar = ['Título', 'Region_Departamento', 'Tipo_Contrato', # 'Ciudad' eliminada
+                                   'Tipo_Jornada', 'Modalidad_Trabajo', 'nivel_ingles', 
+                                   'nivel_educacion', 'NombreEmpresa', 'Categoría']
+    if 'Ciudad' in df.columns: # Si por alguna razón Ciudad sigue en df, capitalizarla
+        columnas_texto_a_capitalizar.append('Ciudad')
+
+    for col in columnas_texto_a_capitalizar: 
+        if col in df.columns: # Verificar si la columna existe antes de aplicar
+            df[col + '_Limpio'] = df[col].apply(capitalizar_texto)
+        else: # Si la columna original no existe, la _Limpio tampoco
+            df[col + '_Limpio'] = pd.NA
+
+    columnas_lista_a_limpiar = ['Lenguajes', 'Frameworks', 'gestores_db', 'Herramientas', 'Conocimientos_Adicionales']
+    for col in columnas_lista_a_limpiar: 
+        if col in df.columns:
+            df[col + '_Lista_Limpia'] = df[col].apply(lambda x: limpiar_lista_delimitada(x, delimitador=','))
+        else:
+            df[col + '_Lista_Limpia'] = pd.NA
+            
+    df['Anos_Experiencia_Float'] = pd.to_numeric(df['Anos_Experiencia'], errors='coerce')
+    df['Anos_Experiencia_Limpio'] = df['Anos_Experiencia_Float'].apply(lambda x: int(round(x)) if pd.notna(x) else pd.NA).astype('Int64')
 
     mapa_a_nombres_finales = {
-        'ID_Oferta': 'ID_Oferta', 'Título_Limpio': 'Titulo_Oferta', 'Ciudad_Limpio': 'Ciudad',
-        'Region_Departamento_Limpio': 'Region_Departamento', 'Fecha_Publicacion_Limpia': 'Fecha_Publicacion',
-        'Tipo_Contrato_Limpio': 'Tipo_Contrato', 'Tipo_Jornada_Limpio': 'Tipo_Jornada',
-        'Modalidad_Trabajo_Limpio': 'Modalidad_Trabajo', 'Salario_Monto_Limpio': 'Salario_Monto', # Ahora es Int64 o pd.NA
-        'Salario_Moneda_Limpia': 'Salario_Moneda', 'Salario_Tipo_Pago_Limpio': 'Salario_Tipo_Pago',
-        'Lenguajes_Lista_Limpia': 'Lenguajes_Lista', 'Frameworks_Lista_Limpia': 'Frameworks_Lista',
-        'gestores_db_Lista_Limpia': 'Bases_Datos_Lista', 'Herramientas_Lista_Limpia': 'Herramientas_Lista',
-        'nivel_ingles_Limpio': 'Nivel_Ingles', 'nivel_educacion_Limpio': 'Nivel_Educacion',
-        'Anos_Experiencia_Limpio': 'Anos_Experiencia', # Ahora es Int64 o pd.NA
+        'ID_Oferta': 'ID_Oferta', 
+        'Título_Limpio': 'Titulo_Oferta', 
+        # 'Ciudad_Limpio': 'Ciudad', # Eliminada si ya no la quieres
+        'Region_Departamento_Limpio': 'Region_Departamento', 
+        'Fecha_Publicacion_Limpia': 'Fecha_Publicacion',
+        'Tipo_Contrato_Limpio': 'Tipo_Contrato', 
+        'Tipo_Jornada_Limpio': 'Tipo_Jornada',
+        'Modalidad_Trabajo_Limpio': 'Modalidad_Trabajo', 
+        'Salario_Monto_Limpio': 'Salario_Monto',
+        'Salario_Moneda_Limpia': 'Salario_Moneda', 
+        'Salario_Tipo_Pago_Limpio': 'Salario_Tipo_Pago',
+        'Lenguajes_Lista_Limpia': 'Lenguajes_Lista', 
+        'Frameworks_Lista_Limpia': 'Frameworks_Lista',
+        'gestores_db_Lista_Limpia': 'Bases_Datos_Lista', 
+        'Herramientas_Lista_Limpia': 'Herramientas_Lista',
+        'nivel_ingles_Limpio': 'Nivel_Ingles', 
+        'nivel_educacion_Limpio': 'Nivel_Educacion',
+        'Anos_Experiencia_Limpio': 'Anos_Experiencia', 
         'Conocimientos_Adicionales_Lista_Limpia': 'Conocimientos_Adicionales_Lista',
-        'Edad_minima_Limpia': 'Edad_Minima',             # Ahora es Int64 o pd.NA
-        'Edad_maxima_Limpia': 'Edad_Maxima',             # Ahora es Int64 o pd.NA
-        'Categoría_Limpio': 'Categoria_Puesto', 'NombreEmpresa_Limpio': 'Nombre_Empresa',
+        'Edad_minima_Limpia': 'Edad_Minima', 
+        'Edad_maxima_Limpia': 'Edad_Maxima',
+        'Categoría_Limpio': 'Categoria_Puesto', 
+        'NombreEmpresa_Limpio': 'Nombre_Empresa',
         'DescripciónEmpresa': 'Contenido_Descripcion_Empresa',
         'Enlace_Oferta': 'Enlace_Oferta',
         'Descripcion_Oferta_Raw': 'Contenido_Descripcion_Oferta'
     }
+    # Si 'Ciudad_Limpio' no está en mapa_a_nombres_finales, no se incluirá.
+
     df_renombrado = pd.DataFrame()
     for key_en_df_intermedio, nombre_columna_final in mapa_a_nombres_finales.items():
-        if key_en_df_intermedio in df.columns: df_renombrado[nombre_columna_final] = df[key_en_df_intermedio]
-        else:
-            original_key = key_en_df_intermedio.replace('_Limpio', '').replace('_Lista_Limpia', '')
-            if original_key in df.columns: df_renombrado[nombre_columna_final] = df[original_key]
+        if key_en_df_intermedio in df.columns: 
+            df_renombrado[nombre_columna_final] = df[key_en_df_intermedio]
+        else: # Fallback si la columna _Limpia no se creó (ej. la original no existía)
+            original_key_sin_sufijo = key_en_df_intermedio.replace('_Limpio', '').replace('_Lista_Limpia', '')
+            if original_key_sin_sufijo in df.columns:
+                df_renombrado[nombre_columna_final] = df[original_key_sin_sufijo]
             else:
-                st.warning(f"Columna '{key_en_df_intermedio}' (ni '{original_key}') no encontrada para '{nombre_columna_final}'.")
+                st.warning(f"Advertencia: Columna '{key_en_df_intermedio}' (ni '{original_key_sin_sufijo}') no encontrada para '{nombre_columna_final}'. Se creará Nula.")
                 df_renombrado[nombre_columna_final] = pd.NA
                 
-    orden_final_columnas_csv = [
-        'ID_Oferta', 'Titulo_Oferta', 'Ciudad', 'Region_Departamento', 'Fecha_Publicacion',
+    orden_final_columnas_csv = [ # Ajustar esta lista si 'Ciudad' se elimina
+        'ID_Oferta', 'Titulo_Oferta', 'Region_Departamento', 'Fecha_Publicacion', # 'Ciudad' eliminada
         'Tipo_Contrato', 'Tipo_Jornada', 'Modalidad_Trabajo', 'Salario_Monto',
         'Salario_Moneda', 'Salario_Tipo_Pago', 'Lenguajes_Lista', 'Frameworks_Lista',
         'Bases_Datos_Lista', 'Herramientas_Lista', 'Nivel_Ingles', 'Nivel_Educacion',
@@ -185,11 +216,17 @@ def procesar_dataframe(df_input):
         'Categoria_Puesto', 'Nombre_Empresa', 'Contenido_Descripcion_Empresa',
         'Enlace_Oferta', 'Contenido_Descripcion_Oferta'
     ]
+    if 'Ciudad' in df_renombrado.columns: # Si por alguna razón Ciudad sigue existiendo, la añadimos al orden
+        # Decide dónde quieres 'Ciudad' en el orden final si existe
+        idx_region = orden_final_columnas_csv.index('Region_Departamento')
+        orden_final_columnas_csv.insert(idx_region, 'Ciudad')
+
+
     try:
         for col_check in orden_final_columnas_csv:
             if col_check not in df_renombrado.columns:
                 st.error(f"Error: Columna '{col_check}' en 'orden_final_columnas_csv' no está en df_renombrado.")
-                df_renombrado[col_check] = pd.NA # Asegurar que exista para el reordenamiento
+                df_renombrado[col_check] = pd.NA 
         df_final_ordenado = df_renombrado[orden_final_columnas_csv]
     except KeyError as e:
         st.error(f"Error crítico al reordenar columnas: {e}.")
@@ -201,6 +238,7 @@ def procesar_dataframe(df_input):
 # --- Función para convertir a CSV para descarga local ---
 @st.cache_data
 def convert_df_to_csv_for_download(df_to_convert):
+    # ... (código sin cambios, usa na_rep='\\N') ...
     df_copy = df_to_convert.copy()
     cols_texto_largo = ['Contenido_Descripcion_Oferta', 'Contenido_Descripcion_Empresa']
     for col_name in cols_texto_largo:
@@ -208,7 +246,6 @@ def convert_df_to_csv_for_download(df_to_convert):
             df_copy[col_name] = df_copy[col_name].astype(str).str.replace('\r\n', ' ', regex=False).str.replace('\n', ' ', regex=False).str.replace('\r', ' ', regex=False)
             df_copy[col_name] = df_copy[col_name].str.replace(r'\s+', ' ', regex=True).str.strip()
     try:
-        # Cuando se usa Int64, los pd.NA se escribirán como \N si na_rep='\\N'
         csv_output = df_copy.to_csv(index=False, encoding='utf-8-sig', sep=',', na_rep='\\N', quoting=csv.QUOTE_ALL, escapechar='"')
         return csv_output.encode('utf-8-sig')
     except Exception as e:
@@ -217,24 +254,21 @@ def convert_df_to_csv_for_download(df_to_convert):
 
 # --- Función para subir DataFrame a S3 ---
 def upload_df_to_s3(df_to_upload, bucket_name, s3_object_key_name, format_type="csv"):
+    # ... (código sin cambios, usa na_rep='\\N') ...
     st.write(f"Subiendo datos procesados a Amazon S3: s3://{bucket_name}/{s3_object_key_name}")
     try:
         s3_resource = boto3.resource('s3')
         df_for_s3 = df_to_upload.copy()
-
         if format_type.lower() == "csv":
             cols_texto_largo = ['Contenido_Descripcion_Oferta', 'Contenido_Descripcion_Empresa']
             for col_name in cols_texto_largo:
                 if col_name in df_for_s3.columns and df_for_s3[col_name].notna().any():
                     df_for_s3[col_name] = df_for_s3[col_name].astype(str).str.replace('\r\n', ' ', regex=False).str.replace('\n', ' ', regex=False).str.replace('\r', ' ', regex=False)
                     df_for_s3[col_name] = df_for_s3[col_name].str.replace(r'\s+', ' ', regex=True).str.strip()
-            
             csv_buffer = io.StringIO()
-            # Cuando se usa Int64, los pd.NA se escribirán como \N si na_rep='\\N'
             df_for_s3.to_csv(csv_buffer, index=False, encoding='utf-8-sig', sep=',', quoting=csv.QUOTE_ALL, escapechar='"', na_rep='\\N')
             s3_resource.Object(bucket_name, s3_object_key_name).put(Body=csv_buffer.getvalue().encode('utf-8-sig'))
-            st.success(f"¡Éxito! Datos subidos como CSV a: s3://{bucket_name}/{s3_object_key_name}")
-
+            st.success(f"¡Éxito! Datos subidos a: s3://{bucket_name}/{s3_object_key_name}")
         elif format_type.lower() == "parquet":
             parquet_buffer = io.BytesIO()
             df_for_s3.to_parquet(parquet_buffer, index=False, engine='pyarrow')
@@ -248,9 +282,8 @@ def upload_df_to_s3(df_to_upload, bucket_name, s3_object_key_name, format_type="
         st.error(f"Fallo al subir datos a S3 (s3://{bucket_name}/{s3_object_key_name}): {e}")
         st.exception(e)
         return False
-
-# --- Interfaz de Streamlit ---
-# (El resto de tu código de interfaz de Streamlit se mantiene igual)
+# --- Interfaz de Streamlit (Sin cambios desde la última versión que te di) ---
+# ... (copia y pega tu bloque de interfaz de Streamlit aquí) ...
 st.set_page_config(page_title="Carga de Datos - Plataforma de Análisis del Mercado Laboral Tecnológico", layout="wide", initial_sidebar_state="expanded")
 st.title("📊 Plataforma de Análisis del Mercado Laboral Tecnológico")
 st.header("Módulo de Carga y Preparación de Datos de Ofertas")
