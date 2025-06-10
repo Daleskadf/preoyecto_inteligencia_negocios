@@ -130,7 +130,7 @@ def procesar_dataframe(df_input):
     df['Edad_maxima_Limpia'] = df['Edad_maxima'].apply(limpiar_edad_a_int).astype('Int64')
     df['Anos_Experiencia_Limpio'] = df['Anos_Experiencia'].apply(limpiar_anos_experiencia_a_int).astype('Int64')
     columnas_texto_a_capitalizar = ['Título', 'Region_Departamento', 'Tipo_Contrato', 'Tipo_Jornada', 'Modalidad_Trabajo', 'nivel_ingles', 'nivel_educacion', 'NombreEmpresa', 'Categoría']
-    if 'Ciudad' in df.columns: columnas_texto_a_capitalizar.append('Ciudad')
+    # No se añade 'Ciudad' aquí porque la eliminaste de columnas_esperadas y orden_final
     for col in columnas_texto_a_capitalizar:
         if col in df.columns: df[col + '_Limpio'] = df[col].apply(capitalizar_texto)
         else: df[col + '_Limpio'] = pd.NA
@@ -140,6 +140,7 @@ def procesar_dataframe(df_input):
         else: df[col + '_Lista_Limpia'] = pd.NA
     mapa_a_nombres_finales = {
         'ID_Oferta': 'ID_Oferta', 'Título_Limpio': 'Titulo_Oferta',
+        # 'Ciudad_Limpio': 'Ciudad', # ELIMINADO
         'Region_Departamento_Limpio': 'Region_Departamento', 'Fecha_Publicacion_Limpia': 'Fecha_Publicacion',
         'Tipo_Contrato_Limpio': 'Tipo_Contrato', 'Tipo_Jornada_Limpio': 'Tipo_Jornada',
         'Modalidad_Trabajo_Limpio': 'Modalidad_Trabajo', 'Salario_Monto_Limpio': 'Salario_Monto',
@@ -155,7 +156,6 @@ def procesar_dataframe(df_input):
         'Enlace_Oferta': 'Enlace_Oferta',
         'Descripcion_Oferta_Raw': 'Contenido_Descripcion_Oferta'
     }
-    if 'Ciudad_Limpio' in df.columns: mapa_a_nombres_finales['Ciudad_Limpio'] = 'Ciudad'
 
     df_renombrado = pd.DataFrame()
     for key_en_df_intermedio, nombre_columna_final in mapa_a_nombres_finales.items():
@@ -164,8 +164,9 @@ def procesar_dataframe(df_input):
             original_key = key_en_df_intermedio.replace('_Limpio', '').replace('_Lista_Limpia', '')
             if original_key in df.columns: df_renombrado[nombre_columna_final] = df[original_key]
             else: df_renombrado[nombre_columna_final] = pd.NA
+                
     orden_final_columnas_csv = [
-        'ID_Oferta', 'Titulo_Oferta', 'Region_Departamento', 'Fecha_Publicacion', # Ciudad eliminada
+        'ID_Oferta', 'Titulo_Oferta', 'Region_Departamento', 'Fecha_Publicacion', # 'Ciudad' ELIMINADA
         'Tipo_Contrato', 'Tipo_Jornada', 'Modalidad_Trabajo', 'Salario_Monto',
         'Salario_Moneda', 'Salario_Tipo_Pago', 'Lenguajes_Lista', 'Frameworks_Lista',
         'Bases_Datos_Lista', 'Herramientas_Lista', 'Nivel_Ingles', 'Nivel_Educacion',
@@ -173,9 +174,6 @@ def procesar_dataframe(df_input):
         'Categoria_Puesto', 'Nombre_Empresa', 'Contenido_Descripcion_Empresa',
         'Enlace_Oferta', 'Contenido_Descripcion_Oferta'
     ]
-    if 'Ciudad' in df_renombrado.columns and 'Ciudad' not in orden_final_columnas_csv:
-        idx_region = orden_final_columnas_csv.index('Region_Departamento')
-        orden_final_columnas_csv.insert(idx_region, 'Ciudad')
     try:
         for col_check in orden_final_columnas_csv:
             if col_check not in df_renombrado.columns: df_renombrado[col_check] = pd.NA
@@ -195,8 +193,8 @@ def convert_df_to_csv_for_download(df_to_convert):
             df_copy[col_name] = df_copy[col_name].astype(str).str.replace('\r\n', ' ', regex=False).str.replace('\n', ' ', regex=False).str.replace('\r', ' ', regex=False)
             df_copy[col_name] = df_copy[col_name].str.replace(r'\s+', ' ', regex=True).str.strip()
     try:
-        # ELIMINADO escapechar='"'
-        csv_output = df_copy.to_csv(index=False, encoding='utf-8-sig', sep=',', na_rep='\\N', quoting=csv.QUOTE_ALL)
+        # CAMBIO: ELIMINADO escapechar='"' y na_rep AHORA ES ''
+        csv_output = df_copy.to_csv(index=False, encoding='utf-8-sig', sep=',', na_rep='', quoting=csv.QUOTE_ALL)
         return csv_output.encode('utf-8-sig')
     except Exception as e:
         st.error(f"Error en conversión a CSV para descarga: {e}")
@@ -214,8 +212,8 @@ def upload_df_to_s3(df_to_upload, bucket_name, s3_object_key_name, format_type="
                     df_for_s3[col_name] = df_for_s3[col_name].astype(str).str.replace('\r\n', ' ', regex=False).str.replace('\n', ' ', regex=False).str.replace('\r', ' ', regex=False)
                     df_for_s3[col_name] = df_for_s3[col_name].str.replace(r'\s+', ' ', regex=True).str.strip()
             csv_buffer = io.StringIO()
-            # ELIMINADO escapechar='"'
-            df_for_s3.to_csv(csv_buffer, index=False, encoding='utf-8-sig', sep=',', quoting=csv.QUOTE_ALL, na_rep='\\N')
+            # CAMBIO: ELIMINADO escapechar='"' y na_rep AHORA ES ''
+            df_for_s3.to_csv(csv_buffer, index=False, encoding='utf-8-sig', sep=',', quoting=csv.QUOTE_ALL, na_rep='')
             s3_resource.Object(bucket_name, s3_object_key_name).put(Body=csv_buffer.getvalue().encode('utf-8-sig'))
             st.success(f"¡Éxito! Datos subidos como CSV a: s3://{bucket_name}/{s3_object_key_name}")
         elif format_type.lower() == "parquet":
@@ -233,8 +231,6 @@ def upload_df_to_s3(df_to_upload, bucket_name, s3_object_key_name, format_type="
         return False
 
 # --- Interfaz de Streamlit ---
-# (El resto de tu código de interfaz de Streamlit se mantiene igual)
-# ...
 st.set_page_config(page_title="Carga de Datos - Plataforma de Análisis del Mercado Laboral Tecnológico", layout="wide", initial_sidebar_state="expanded")
 st.title("📊 Plataforma de Análisis del Mercado Laboral Tecnológico")
 st.header("Módulo de Carga y Preparación de Datos de Ofertas")
@@ -245,7 +241,7 @@ AWS_ACCESS_KEY_ID_LOADED = st.secrets.get("AWS_ACCESS_KEY_ID", "")
 AWS_SECRET_ACCESS_KEY_LOADED = st.secrets.get("AWS_SECRET_ACCESS_KEY", "")
 S3_BUCKET_NAME_FROM_SECRET = st.secrets.get("S3_PROCESSED_BUCKET", "")
 S3_OBJECT_PREFIX_FROM_SECRET = st.secrets.get("S3_OBJECT_PREFIX", "ofertas_limpias/")
-S3_FILE_FORMAT_FROM_SECRET = st.secrets.get("S3_FILE_FORMAT", "csv") # Default a CSV
+S3_FILE_FORMAT_FROM_SECRET = st.secrets.get("S3_FILE_FORMAT", "csv")
 
 s3_bucket_to_use = S3_BUCKET_NAME_FROM_SECRET
 if not s3_bucket_to_use:
@@ -260,7 +256,6 @@ else:
         index=0 if S3_FILE_FORMAT_FROM_SECRET.lower() == "csv" else 1
     )
     S3_FILE_FORMAT_TO_USE = s3_output_format_choice
-
 
 uploaded_file = st.file_uploader("📂 **Paso 1:** Sube tu archivo CSV de Ofertas Laborales", type="csv", help="El archivo debe estar delimitado por punto y coma (;) y codificado en UTF-8.")
 
