@@ -3,9 +3,9 @@ import pandas as pd
 import re
 from datetime import datetime, timedelta
 import os
-import csv
-import boto3
-import io
+import csv # Importar csv para las constantes de quoting
+import boto3 # Para S3
+import io    # Para buffers en memoria
 
 # --- Constantes ---
 CURRENT_YEAR = datetime.now().year
@@ -44,9 +44,8 @@ def parse_fecha(fecha_str):
     return None
 
 def limpiar_salario_a_int(monto_str, moneda_str_original, tipo_pago_str_original):
-    monto_limpio_int = pd.NA # Usar pd.NA para Int64
+    monto_limpio_int = pd.NA 
     moneda_limpia, tipo_pago_limpio = None, None
-    
     if pd.notna(monto_str) and str(monto_str).strip():
         monto_str_procesado = str(monto_str).lower().strip()
         invalidos_salario = ['no disponible', 'a convenir', 'según mercado', 'nan', 'acordar', 'negociable', '']
@@ -59,7 +58,6 @@ def limpiar_salario_a_int(monto_str, moneda_str_original, tipo_pago_str_original
                     monto_float = float(match_num.group(1))
                     monto_limpio_int = int(round(monto_float)) 
                 except ValueError: pass 
-    
     if pd.notna(monto_limpio_int):
         if pd.notna(moneda_str_original) and str(moneda_str_original).strip():
             moneda_str_lower = str(moneda_str_original).lower().strip()
@@ -78,15 +76,14 @@ def limpiar_salario_a_int(monto_str, moneda_str_original, tipo_pago_str_original
                 tipo_pago_limpio = str(tipo_pago_str_original).strip().capitalize()
         if tipo_pago_limpio is None and monto_limpio_int > 200: tipo_pago_limpio = "Mensual"
         elif tipo_pago_limpio is None: tipo_pago_limpio = "No especificado"
-    else: # Si monto_limpio_int es pd.NA, moneda y tipo también deberían ser None o "No especificado"
+    else:
         moneda_limpia = None
         tipo_pago_limpio = None
-             
     return monto_limpio_int, moneda_limpia, tipo_pago_limpio
 
 def limpiar_edad_a_int(edad_str):
     if pd.isna(edad_str) or str(edad_str).lower().strip() in ['no disponible', 'nan', '']: return pd.NA
-    try: return int(round(float(str(edad_str)))) # Redondear y convertir a int
+    try: return int(round(float(str(edad_str))))
     except ValueError:
         match = re.search(r'(\d+)', str(edad_str))
         if match:
@@ -117,93 +114,58 @@ def limpiar_lista_delimitada(texto_lista, delimitador=','):
     items = [item.strip().strip('"').strip().capitalize() for item in str(texto_lista).split(delimitador) if item.strip().strip('"').strip()]
     return delimitador.join(items) if items else None
 
-# --- Lógica Principal de Procesamiento ---
 def procesar_dataframe(df_input):
     st.write("Iniciando proceso de estandarización y preparación de datos...")
     df = df_input.copy()
-    
-    columnas_esperadas_del_csv_original = [
-        'ID_Oferta', 'Título', 'Region_Departamento', 'Fecha_Publicacion', # 'Ciudad' eliminada de esta lista
-        'Tipo_Contrato', 'Tipo_Jornada', 'Modalidad_Trabajo', 'Salario_Monto',
-        'Salario_Moneda', 'Salario_Tipo_Pago', 'Descripcion_Oferta_Raw', 'Lenguajes',
-        'Frameworks', 'gestores_db', 'Herramientas', 'nivel_ingles', 'nivel_educacion',
-        'Anos_Experiencia', 'Conocimientos_Adicionales', 'Edad_minima', 'Edad_maxima',
-        'NombreEmpresa', 'DescripciónEmpresa', 'Enlace_Oferta', 'Categoría'
-    ]
-    # Si 'Ciudad' existe en df_input, se ignorará si no está en columnas_esperadas_del_csv_original
-    # o en mapa_a_nombres_finales.
+    columnas_esperadas_del_csv_original = ['ID_Oferta', 'Título', 'Region_Departamento', 'Fecha_Publicacion','Tipo_Contrato', 'Tipo_Jornada', 'Modalidad_Trabajo', 'Salario_Monto','Salario_Moneda', 'Salario_Tipo_Pago', 'Descripcion_Oferta_Raw', 'Lenguajes','Frameworks', 'gestores_db', 'Herramientas', 'nivel_ingles', 'nivel_educacion','Anos_Experiencia', 'Conocimientos_Adicionales', 'Edad_minima', 'Edad_maxima','NombreEmpresa', 'DescripciónEmpresa', 'Enlace_Oferta', 'Categoría']
     for col_esperada in columnas_esperadas_del_csv_original:
         if col_esperada not in df.columns:
-            st.warning(f"Advertencia: Columna '{col_esperada}' no encontrada en el archivo CSV subido. Se creará como Nula.")
             df[col_esperada] = pd.NA
-
     df['Fecha_Publicacion_Limpia'] = df['Fecha_Publicacion'].apply(parse_fecha)
-    
     salario_data = df.apply(lambda r: limpiar_salario_a_int(r['Salario_Monto'], r['Salario_Moneda'], r['Salario_Tipo_Pago']), axis=1, result_type='expand')
     df['Salario_Monto_Limpio'] = salario_data[0].astype('Int64')
     df['Salario_Moneda_Limpia'] = salario_data[1]
     df['Salario_Tipo_Pago_Limpio'] = salario_data[2]
-
     df['Edad_minima_Limpia'] = df['Edad_minima'].apply(limpiar_edad_a_int).astype('Int64')
     df['Edad_maxima_Limpia'] = df['Edad_maxima'].apply(limpiar_edad_a_int).astype('Int64')
-    
     df['Anos_Experiencia_Limpio'] = df['Anos_Experiencia'].apply(limpiar_anos_experiencia_a_int).astype('Int64')
-    
-    columnas_texto_a_capitalizar = ['Título', 'Region_Departamento', 'Tipo_Contrato', # 'Ciudad' eliminada
-                                   'Tipo_Jornada', 'Modalidad_Trabajo', 'nivel_ingles', 
-                                   'nivel_educacion', 'NombreEmpresa', 'Categoría']
-    for col in columnas_texto_a_capitalizar: 
+    columnas_texto_a_capitalizar = ['Título', 'Region_Departamento', 'Tipo_Contrato', 'Tipo_Jornada', 'Modalidad_Trabajo', 'nivel_ingles', 'nivel_educacion', 'NombreEmpresa', 'Categoría']
+    if 'Ciudad' in df.columns: columnas_texto_a_capitalizar.append('Ciudad')
+    for col in columnas_texto_a_capitalizar:
         if col in df.columns: df[col + '_Limpio'] = df[col].apply(capitalizar_texto)
-        else: df[col + '_Limpio'] = pd.NA # Asegurar que la columna _Limpio exista aunque la original no
-        
+        else: df[col + '_Limpio'] = pd.NA
     columnas_lista_a_limpiar = ['Lenguajes', 'Frameworks', 'gestores_db', 'Herramientas', 'Conocimientos_Adicionales']
-    for col in columnas_lista_a_limpiar: 
+    for col in columnas_lista_a_limpiar:
         if col in df.columns: df[col + '_Lista_Limpia'] = df[col].apply(lambda x: limpiar_lista_delimitada(x, delimitador=','))
         else: df[col + '_Lista_Limpia'] = pd.NA
-
     mapa_a_nombres_finales = {
-        'ID_Oferta': 'ID_Oferta', 
-        'Título_Limpio': 'Titulo_Oferta', 
-        # 'Ciudad_Limpio': 'Ciudad', # Clave para Ciudad eliminada
-        'Region_Departamento_Limpio': 'Region_Departamento', 
-        'Fecha_Publicacion_Limpia': 'Fecha_Publicacion',
-        'Tipo_Contrato_Limpio': 'Tipo_Contrato', 
-        'Tipo_Jornada_Limpio': 'Tipo_Jornada',
-        'Modalidad_Trabajo_Limpio': 'Modalidad_Trabajo', 
-        'Salario_Monto_Limpio': 'Salario_Monto',
-        'Salario_Moneda_Limpia': 'Salario_Moneda', 
-        'Salario_Tipo_Pago_Limpio': 'Salario_Tipo_Pago',
-        'Lenguajes_Lista_Limpia': 'Lenguajes_Lista', 
-        'Frameworks_Lista_Limpia': 'Frameworks_Lista',
-        'gestores_db_Lista_Limpia': 'Bases_Datos_Lista', 
-        'Herramientas_Lista_Limpia': 'Herramientas_Lista',
-        'nivel_ingles_Limpio': 'Nivel_Ingles', 
-        'nivel_educacion_Limpio': 'Nivel_Educacion',
-        'Anos_Experiencia_Limpio': 'Anos_Experiencia', 
+        'ID_Oferta': 'ID_Oferta', 'Título_Limpio': 'Titulo_Oferta',
+        'Region_Departamento_Limpio': 'Region_Departamento', 'Fecha_Publicacion_Limpia': 'Fecha_Publicacion',
+        'Tipo_Contrato_Limpio': 'Tipo_Contrato', 'Tipo_Jornada_Limpio': 'Tipo_Jornada',
+        'Modalidad_Trabajo_Limpio': 'Modalidad_Trabajo', 'Salario_Monto_Limpio': 'Salario_Monto',
+        'Salario_Moneda_Limpia': 'Salario_Moneda', 'Salario_Tipo_Pago_Limpio': 'Salario_Tipo_Pago',
+        'Lenguajes_Lista_Limpia': 'Lenguajes_Lista', 'Frameworks_Lista_Limpia': 'Frameworks_Lista',
+        'gestores_db_Lista_Limpia': 'Bases_Datos_Lista', 'Herramientas_Lista_Limpia': 'Herramientas_Lista',
+        'nivel_ingles_Limpio': 'Nivel_Ingles', 'nivel_educacion_Limpio': 'Nivel_Educacion',
+        'Anos_Experiencia_Limpio': 'Anos_Experiencia',
         'Conocimientos_Adicionales_Lista_Limpia': 'Conocimientos_Adicionales_Lista',
-        'Edad_minima_Limpia': 'Edad_Minima', 
-        'Edad_maxima_Limpia': 'Edad_Maxima',
-        'Categoría_Limpio': 'Categoria_Puesto', 
-        'NombreEmpresa_Limpio': 'Nombre_Empresa',
+        'Edad_minima_Limpia': 'Edad_Minima', 'Edad_maxima_Limpia': 'Edad_Maxima',
+        'Categoría_Limpio': 'Categoria_Puesto', 'NombreEmpresa_Limpio': 'Nombre_Empresa',
         'DescripciónEmpresa': 'Contenido_Descripcion_Empresa',
         'Enlace_Oferta': 'Enlace_Oferta',
         'Descripcion_Oferta_Raw': 'Contenido_Descripcion_Oferta'
     }
-    
+    if 'Ciudad_Limpio' in df.columns: mapa_a_nombres_finales['Ciudad_Limpio'] = 'Ciudad'
+
     df_renombrado = pd.DataFrame()
     for key_en_df_intermedio, nombre_columna_final in mapa_a_nombres_finales.items():
-        if key_en_df_intermedio in df.columns: 
-            df_renombrado[nombre_columna_final] = df[key_en_df_intermedio]
-        else: # Fallback si la columna _Limpia no se creó
-            original_key_sin_sufijo_o_no_procesada = key_en_df_intermedio.replace('_Limpio', '').replace('_Lista_Limpia', '')
-            if original_key_sin_sufijo_o_no_procesada in df.columns:
-                df_renombrado[nombre_columna_final] = df[original_key_sin_sufijo_o_no_procesada]
-            else:
-                # st.warning(f"Columna '{key_en_df_intermedio}' (ni '{original_key_sin_sufijo_o_no_procesada}') no encontrada para '{nombre_columna_final}'.")
-                df_renombrado[nombre_columna_final] = pd.NA
-                
-    orden_final_columnas_csv = [ # 'Ciudad' eliminada de esta lista
-        'ID_Oferta', 'Titulo_Oferta', 'Region_Departamento', 'Fecha_Publicacion',
+        if key_en_df_intermedio in df.columns: df_renombrado[nombre_columna_final] = df[key_en_df_intermedio]
+        else:
+            original_key = key_en_df_intermedio.replace('_Limpio', '').replace('_Lista_Limpia', '')
+            if original_key in df.columns: df_renombrado[nombre_columna_final] = df[original_key]
+            else: df_renombrado[nombre_columna_final] = pd.NA
+    orden_final_columnas_csv = [
+        'ID_Oferta', 'Titulo_Oferta', 'Region_Departamento', 'Fecha_Publicacion', # Ciudad eliminada
         'Tipo_Contrato', 'Tipo_Jornada', 'Modalidad_Trabajo', 'Salario_Monto',
         'Salario_Moneda', 'Salario_Tipo_Pago', 'Lenguajes_Lista', 'Frameworks_Lista',
         'Bases_Datos_Lista', 'Herramientas_Lista', 'Nivel_Ingles', 'Nivel_Educacion',
@@ -211,24 +173,19 @@ def procesar_dataframe(df_input):
         'Categoria_Puesto', 'Nombre_Empresa', 'Contenido_Descripcion_Empresa',
         'Enlace_Oferta', 'Contenido_Descripcion_Oferta'
     ]
-
+    if 'Ciudad' in df_renombrado.columns and 'Ciudad' not in orden_final_columnas_csv:
+        idx_region = orden_final_columnas_csv.index('Region_Departamento')
+        orden_final_columnas_csv.insert(idx_region, 'Ciudad')
     try:
-        # Asegurar que todas las columnas de la lista final existan en df_renombrado antes de reordenar
         for col_check in orden_final_columnas_csv:
-            if col_check not in df_renombrado.columns:
-                # Esto puede pasar si una clave en mapa_a_nombres_finales no existía en df
-                # y tampoco su versión original, resultando en pd.NA pero sin el nombre de columna final
-                st.warning(f"La columna '{col_check}' de 'orden_final_columnas_csv' no está en el DataFrame renombrado. Se añadirá como Nula.")
-                df_renombrado[col_check] = pd.NA 
+            if col_check not in df_renombrado.columns: df_renombrado[col_check] = pd.NA
         df_final_ordenado = df_renombrado[orden_final_columnas_csv]
     except KeyError as e:
-        st.error(f"Error crítico al reordenar columnas: {e}. Columnas en df_renombrado: {df_renombrado.columns.tolist()}")
+        st.error(f"Error crítico al reordenar: {e}. Cols en df_renombrado: {df_renombrado.columns.tolist()}")
         return pd.DataFrame(columns=orden_final_columnas_csv)
-
-    st.write("Datos preparados y ordenados exitosamente.")
+    st.write("Datos preparados y ordenados.")
     return df_final_ordenado
 
-# --- Función para convertir a CSV para descarga local (sin cambios) ---
 @st.cache_data
 def convert_df_to_csv_for_download(df_to_convert):
     df_copy = df_to_convert.copy()
@@ -238,15 +195,15 @@ def convert_df_to_csv_for_download(df_to_convert):
             df_copy[col_name] = df_copy[col_name].astype(str).str.replace('\r\n', ' ', regex=False).str.replace('\n', ' ', regex=False).str.replace('\r', ' ', regex=False)
             df_copy[col_name] = df_copy[col_name].str.replace(r'\s+', ' ', regex=True).str.strip()
     try:
-        csv_output = df_copy.to_csv(index=False, encoding='utf-8-sig', sep=',', na_rep='\\N', quoting=csv.QUOTE_ALL, escapechar='"')
+        # ELIMINADO escapechar='"'
+        csv_output = df_copy.to_csv(index=False, encoding='utf-8-sig', sep=',', na_rep='\\N', quoting=csv.QUOTE_ALL)
         return csv_output.encode('utf-8-sig')
     except Exception as e:
-        st.error(f"Error durante la conversión a CSV para descarga: {e}")
+        st.error(f"Error en conversión a CSV para descarga: {e}")
         return None
 
-# --- Función para subir DataFrame a S3 (sin cambios) ---
 def upload_df_to_s3(df_to_upload, bucket_name, s3_object_key_name, format_type="csv"):
-    st.write(f"Subiendo datos procesados a Amazon S3: s3://{bucket_name}/{s3_object_key_name}")
+    st.write(f"Subiendo datos a S3: s3://{bucket_name}/{s3_object_key_name}")
     try:
         s3_resource = boto3.resource('s3')
         df_for_s3 = df_to_upload.copy()
@@ -257,7 +214,8 @@ def upload_df_to_s3(df_to_upload, bucket_name, s3_object_key_name, format_type="
                     df_for_s3[col_name] = df_for_s3[col_name].astype(str).str.replace('\r\n', ' ', regex=False).str.replace('\n', ' ', regex=False).str.replace('\r', ' ', regex=False)
                     df_for_s3[col_name] = df_for_s3[col_name].str.replace(r'\s+', ' ', regex=True).str.strip()
             csv_buffer = io.StringIO()
-            df_for_s3.to_csv(csv_buffer, index=False, encoding='utf-8-sig', sep=',', quoting=csv.QUOTE_ALL, escapechar='"', na_rep='\\N')
+            # ELIMINADO escapechar='"'
+            df_for_s3.to_csv(csv_buffer, index=False, encoding='utf-8-sig', sep=',', quoting=csv.QUOTE_ALL, na_rep='\\N')
             s3_resource.Object(bucket_name, s3_object_key_name).put(Body=csv_buffer.getvalue().encode('utf-8-sig'))
             st.success(f"¡Éxito! Datos subidos como CSV a: s3://{bucket_name}/{s3_object_key_name}")
         elif format_type.lower() == "parquet":
@@ -266,16 +224,17 @@ def upload_df_to_s3(df_to_upload, bucket_name, s3_object_key_name, format_type="
             s3_resource.Object(bucket_name, s3_object_key_name).put(Body=parquet_buffer.getvalue())
             st.success(f"¡Éxito! Datos subidos como Parquet a: s3://{bucket_name}/{s3_object_key_name}")
         else:
-            st.error(f"Formato '{format_type}' no soportado para subida a S3.")
+            st.error(f"Formato '{format_type}' no soportado para S3.")
             return False
         return True
     except Exception as e:
-        st.error(f"Fallo al subir datos a S3 (s3://{bucket_name}/{s3_object_key_name}): {e}")
+        st.error(f"Fallo al subir datos a S3: {e}")
         st.exception(e)
         return False
 
-# --- Interfaz de Streamlit (sin cambios desde la última versión) ---
-# ... (Copia aquí la sección de la interfaz de Streamlit de tu código anterior) ...
+# --- Interfaz de Streamlit ---
+# (El resto de tu código de interfaz de Streamlit se mantiene igual)
+# ...
 st.set_page_config(page_title="Carga de Datos - Plataforma de Análisis del Mercado Laboral Tecnológico", layout="wide", initial_sidebar_state="expanded")
 st.title("📊 Plataforma de Análisis del Mercado Laboral Tecnológico")
 st.header("Módulo de Carga y Preparación de Datos de Ofertas")
